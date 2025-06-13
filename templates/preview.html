@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>声音预览页面 by大卷毛</title>
+    <style>
+        .tabs {
+            display: flex;
+            cursor: pointer;
+        }
+        .tab {
+            padding: 10px 20px;
+            border: 1px solid #ccc;
+            border-bottom: none;
+            background: #eee;
+        }
+        .tab.active {
+            background: white;
+            font-weight: bold;
+        }
+        .tab-content {
+            max-height: 40em;
+            overflow-y: auto;
+            border: 1px solid #ccc;
+            margin-bottom: 2em;
+        }
+        .tab-content:not(.active) {
+            display: none;
+        }
+        .my-table {
+            border-collapse: collapse; /* 等价于 cellspacing=0 */
+            width: 100%;
+        }
+
+        .my-table th, .my-table td {
+            border: 1px solid #ccc;
+            padding: 8px; /* 等价于 cellpadding */
+            text-align: left;
+        }
+        .create-btn {
+            background-color: #5ab131;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 0.2em 0.6em;
+            cursor: pointer;
+        }
+        .edit-btn {
+            background-color: #FFA500;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 0.8em 0.6em;
+            cursor: pointer;
+            width: 8em;
+        }
+        .change-btn {
+            background-color: #5ab131;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 0.8em 0.6em;
+            cursor: pointer;
+            width: 8em;
+        }
+        .my-table td:nth-child(3) {
+            max-width: 50em;
+            word-wrap: break-word;  /* 长单词换行 */
+            line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+    <h1>声音编辑系统-预览页 V1.0 By大卷毛</h1>
+    <div ><a href="{{ url_for('character_page') }}"><button style="margin-bottom: 2em">跳转到角色页</button></a></div>
+
+    <div class="tabs">
+        {% for tab_li in tab_list %}
+            <div class="tab {% if loop.first %}active{% endif %}" data-tab="{{ loop.index }}">{{ tab_li }}</div>
+        {% endfor %}
+    </div>
+
+    {% for tab_li in tab_list %}
+    <div class="tab-content {% if loop.first %}active{% endif %}" data-tab="{{ loop.index }}" data-collection="{{ tab_li }}">
+        <table class="my-table">
+            <thead>
+                <tr>
+                    <th style="width: 8em;">角色名</th>
+                    <th>累计音频数量</th>
+                    <th>预览文本</th>
+                    <th>预览声音</th>
+                    <th style="width: 12em;">操作</th>
+                </tr>
+            </thead>
+            <tbody id="tbody-{{ loop.index }}"></tbody>
+        </table>
+        <div class="load-status" style="text-align:center; padding:10px; color:gray;">可以继续下滑...</div>
+    </div>
+    {% endfor %}
+
+    <script>
+        const tabs = document.querySelectorAll('.tab');
+        const contents = document.querySelectorAll('.tab-content');
+
+        // 使用当前角色声音创建一个新的角色
+        function createNewCharacter(button) {
+            const path = button.getAttribute('data-path');  // 读取 data-path 属性
+            console.log("收到路径：", path);
+
+            // 你可以继续使用这个 path，比如发 AJAX、填表、弹窗等等
+            const newName = prompt(`请输入 "${path}" 的新角色名：`);
+
+            if (newName && !/^[\u4e00-\u9fa5]+$/.test(newName)) {
+                alert('角色名只能包含中文字符，不能包含空格或其他符号');
+                return;
+            }
+
+            if (newName) {
+                // 示例操作：发送给后端
+                fetch('/create-character', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        path: path,
+                        new_name: newName
+                    })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        alert("角色创建成功！ 请前往角色页确认。");
+                    } else {
+                        alert("创建失败：" + data.message);
+                    }
+                });
+            }
+        }
+
+        // 切换角色的试听音色
+        function changeVoice(button) {
+            const row = button.closest('tr');
+            const path = button.getAttribute('data-path');
+            console.log("当前行：", row);
+            console.log("收到路径：", path);
+
+            fetch(`/api/get_new_voice?path=${encodeURIComponent(path)}`)
+                .then(response => response.json())
+                .then(data => {
+                    const newFilename = data.new_filename;
+                    console.log(newFilename)
+
+                    // 更新文件名 td
+                    const fileNameTd = row.children[2];  // 假设第 3 个 <td> 是文件名
+                    fileNameTd.textContent = getFileName(newFilename);
+
+                    // 更新 audio source
+                    const audioTd = row.children[3];  // 假设第 4 个 <td> 是音频播放器
+                    const audio = audioTd.querySelector('audio');
+                    const source = audio.querySelector('source');
+                    source.src = `/voice?filename=${newFilename}`;
+                    audio.load();  // 重新加载新的音频
+                })
+                .catch(error => {
+                    console.error('获取新语音失败:', error);
+                    alert('获取新语音失败，请稍后重试。');
+                });
+        }
+
+        // 跳转到源角色页面
+        function editOriginCharacter(button) {
+            const path = button.getAttribute('data-path');
+            const url = `/origin_page?file=${encodeURIComponent(path)}`;
+            window.location.href = url;  // 页面跳转
+        }
+
+        // 选项卡切换时的声音懒加载
+        document.addEventListener('DOMContentLoaded', () => {
+            const tabs = document.querySelectorAll('.tab');
+            const tabContents = document.querySelectorAll('.tab-content');
+
+            const loadingFlags = {};
+            const pageOffsets = {};
+            const loadedTabs = new Set();
+            const hasMoreFlags = {};
+
+            // 默认只激活第一个 tab
+            const firstActive = document.querySelector('.tab.active');
+            if (firstActive) {
+                const firstIndex = firstActive.dataset.tab;
+                activateTab(firstIndex);
+            }
+
+            // 点击 tab 切换逻辑
+            tabs.forEach(tab => {
+                tab.addEventListener('click', () => {
+                    const index = tab.dataset.tab;
+
+                    // 激活 tab 样式
+                    tabs.forEach(t => t.classList.remove('active'));
+                    tab.classList.add('active');
+
+                    // 显示/隐藏内容区
+                    tabContents.forEach(content => {
+                        content.classList.toggle('active', content.dataset.tab === index);
+                    });
+
+                    // 如果还没加载过，则开始懒加载
+                    if (!loadedTabs.has(index)) {
+                        activateTab(index);
+                    }
+                });
+            });
+
+            function activateTab(tabIndex) {
+                const tabContent = document.querySelector(`.tab-content[data-tab="${tabIndex}"]`);
+                if (!tabContent) return;
+
+                loadingFlags[tabIndex] = false;
+                pageOffsets[tabIndex] = 1;
+                hasMoreFlags[tabIndex] = true;
+                loadedTabs.add(tabIndex);
+
+                // 绑定滚动事件
+                tabContent.addEventListener('scroll', () => {
+                    if (loadingFlags[tabIndex]) return;
+                    if (!hasMoreFlags[tabIndex]) return;
+                    if (tabContent.scrollTop + tabContent.clientHeight >= tabContent.scrollHeight - 100) {
+                        loadMore(tabContent, tabIndex);
+                    }
+                });
+
+                // 首次加载
+                loadMore(tabContent, tabIndex);
+            }
+
+            function loadMore(tabContent, tabIndex) {
+                const collection = tabContent.dataset.collection;
+                const offset = pageOffsets[tabIndex];
+                const limit = 10;
+                const tbody = tabContent.querySelector(`#tbody-${tabIndex}`);
+                const status = tabContent.querySelector('.load-status');
+
+                loadingFlags[tabIndex] = true;
+                status.textContent = '加载中...';
+
+                fetch(`/load-more?collection=${encodeURIComponent(collection)}&offset=${offset}&limit=${limit}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        const characterFiles = data.character_files;
+                        const hasMore = data.has_more;
+                        const tab_li = data.tab_li
+
+                        for (const item of characterFiles) {
+                            const [character, data] = Object.entries(item)[0];  // 提取角色名和对应数据
+                            const row = document.createElement('tr');
+                            row.innerHTML = `
+                                <td style="position: relative;">
+                                    ${character}
+                                    <button
+                                        class="create-btn"
+                                        style="position: absolute; right: 5px; top: 50%; transform: translateY(-50%);"
+                                        onclick="createNewCharacter(this)"
+                                        data-path="${data.collect_name}_${character}">
+                                        +新建
+                                    </button>
+                                </td>
+                                <td>${data.count}</td>
+                                <td>${getFileName(data.preview)}</td>
+                                <td>
+                                    <audio controls>
+                                        <source src="/voice?filename=${data.preview}" type="audio/wav">
+                                    </audio>
+                                </td>
+                                <td style="position: relative;">
+                                    <div style="display: flex; justify-content: flex-end; gap: 0.5em; align-items: center;">
+                                        <button class="change-btn" onclick="changeVoice(this)" data-path="${data.collect_name}_${character}" >
+                                            更换试听
+                                        </button>
+                                        <button class="edit-btn" onclick="editOriginCharacter(this)" data-path="${data.collect_name}_${character}">
+                                            编辑源文件
+                                        </button>
+                                    </div>
+                                </td>
+                            `;
+                            tbody.appendChild(row);
+                        }
+                        if (!hasMore) {
+                            hasMoreFlags[tabIndex] = false;
+                            status.textContent = '没有更多了';
+                        } else {
+                            status.textContent = '可以继续下滑...';
+                            pageOffsets[tabIndex] += 1;
+                        }
+
+                        loadingFlags[tabIndex] = false;
+                    })
+                    .catch(err => {
+                        console.error('加载失败：', err);
+                        status.textContent = '加载失败，请稍后重试';
+                        loadingFlags[tabIndex] = false;
+                    });
+            }
+        });
+
+        // 工具函数：提取文件名
+        function getFileName(path) {
+                const parts = path.split(/[\\/]/);
+                return parts[parts.length - 1];
+        }
+    </script>
+</body>
+</html>

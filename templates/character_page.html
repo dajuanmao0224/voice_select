@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>角色编辑页面 by大卷毛</title>
+    <style>
+        .tabs {
+            display: flex;
+            cursor: pointer;
+        }
+        .tab {
+            padding: 10px 20px;
+            border: 1px solid #ccc;
+            border-bottom: none;
+            background: #eee;
+        }
+        .tab.active {
+            background: #E3F2D9;
+            font-weight: bold;
+        }
+        .tab-content {
+            border: 1px solid #ccc;
+            padding: 20px;
+            background: white;
+        }
+        .tab-content:not(.active) {
+            display: none;
+        }
+        .my-table {
+            border-collapse: collapse; /* 等价于 cellspacing=0 */
+            width: 100%;
+        }
+
+        .my-table th, .my-table td {
+            border: 1px solid #ccc;
+            padding: 8px; /* 等价于 cellpadding */
+            text-align: left;
+        }
+        .tabs {
+            display: flex;
+            flex-wrap: wrap;       /* 关键：允许自动换行 */
+            gap: 0.5em;            /* 可选：每个 tab 之间的间距 */
+            border-bottom: 1px solid #ccc;
+            padding: 0.5em 0;
+        }
+        .tab {
+            padding: 0.4em 1em;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            background-color: #ccc;
+            cursor: pointer;
+            user-select: none;
+        }
+        /* 给音频列表一个固定高度，滚动容器 */
+        .audio-scroll-container {
+            max-height: 40em; /* 你自己调 */
+            overflow-y: auto;
+            border: 1px solid #ccc;
+        }
+        .tab-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 0.5em;
+        }
+        .delete-btn {
+            background-color: #ff4d4f;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 0.2em 0.6em;
+            cursor: pointer;
+        }
+        .delete-emotion-btn {
+            background-color: #ff4d4f;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 0.2em 0.6em;
+            cursor: pointer;
+            margin-left: 0.5em;
+            font-size: 0.9em;
+        }
+        .emotion-button {
+            display: inline-block;  /* 让 div 像 button 一样排成一行 */
+            margin: 0.3em;
+            padding: 0.5em 1em;
+            border: 1px solid #ccc;
+            background-color: #f0f0f0;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+
+        .edit-btn {
+            margin: 0.3em;
+            padding: 0.5em 1em;
+            border: 1px solid #ccc;
+            background-color: #4CAF50;
+            cursor: pointer;
+            border-radius: 5px;
+            color: white;
+        }
+
+        .copy-btn, .text-btn {
+            margin: 0.3em;
+            padding: 0.5em 1em;
+            border: 1px solid #ccc;
+            background-color: #FFA500;
+            cursor: pointer;
+            border-radius: 5px;
+            color: white;
+        }
+
+        .emotion-button.selected {
+            background-color: #4CAF50;
+            color: white;
+            border-color: #4CAF50;
+        }
+
+        .add-emotion-btn {
+            background-color: #FFA500;  /* 橘黄色 */
+            margin: 0.3em;
+            padding: 0.5em 1em;
+            border: 1px solid #ccc;
+            cursor: pointer;
+            border-radius: 5px;
+            color: white;
+        }
+
+        .add-emotion-btn:hover {
+            background-color: #ff8c00;  /* 深一点的橘色 */
+        }
+    </style>
+</head>
+<body>
+    <h1>声音编辑系统-角色编辑页 V1.0 By大卷毛</h1>
+    <div ><a href="{{ url_for('homepage') }}"><button style="margin-bottom: 2em">跳转到预览页</button></a></div>
+
+    <div class="tabs">
+        {% for character in character_dict %}
+            <div class="tab {% if loop.first %}active{% endif %}" data-tab="{{ loop.index }}">
+                {{ character }}
+                <button class="delete-btn" data-character="{{ character }}" > -删除 </button>
+            </div>
+        {% endfor %}
+    </div>
+
+    {% for character in character_dict %}
+    <div class="tab-content {% if loop.first %}active{% endif %}" data-tab="{{ loop.index }}">
+
+        <div class="emotion-buttons" data-character="{{ character }}">
+            {% for e in character_dict[character] %}
+            <div
+                class="emotion-button {% if e == emotion %}selected{% endif %}"
+                onclick="loadEmotionAudioButton(this)"
+                data-emotion="{{ e }}"
+                data-character="{{ character }}"
+            >
+                {{ e }}
+                <button class="delete-emotion-btn" data-emotion="{{ e }}" data-character="{{ character }}"  > -删除 </button>
+            </div>
+            {% endfor %}
+            <button class="add-emotion-btn" style="margin-bottom: 2em;" data-character="{{ character }}">+ 新增情绪</button>
+        </div>
+
+        <div class="audio-scroll-container" id="scroll_container_{{ character }}">
+            <table class="my-table">
+                <thead>
+                    <tr>
+                        <th>声音</th>
+                        <th>文本</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="audio_tbody_{{ character }}">
+                </tbody>
+            </table>
+            <div class="load-status" style="text-align:center; padding:10px; color:gray;">可以继续下滑...</div>
+        </div>
+    </div>
+    {% endfor %}
+
+    <!-- 情绪选择pop框 -->
+    <div id="emotion-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%;
+         background:rgba(0,0,0,0.5); z-index:1000; justify-content:center; align-items:center;">
+        <div style="background:white; padding:20px; border-radius:10px; min-width:300px;">
+            <h3>请修改和选择新的情绪名称</h3>
+            <textarea  type="text" id="emotion-filename-input" style="width: 100%;
+                font-size: 0.85em;
+                padding: 0.5em;
+                margin-bottom: 1em;
+                box-sizing: border-box;
+                resize: vertical;   /* 允许垂直拖动改变高度 */
+                min-height: 2.5em;  /* 最小高度和 select 高度差不多 */
+                line-height: 1.2em;
+                white-space: normal; /* 自动换行 */
+                overflow-wrap: break-word; /* 换行长词 */"></textarea>
+            <select id="emotion-select" style="width: 100%;
+                font-size: 1em;
+                padding: 0.5em;
+                height: 3em;
+                margin-bottom: 1em;
+                box-sizing: border-box;"></select>
+            <div style="text-align:right;">
+                <button id="confirm-btn" style="
+                    background-color: #4CAF50;
+                    color: white;
+                    padding: 0.6em 1.2em;
+                    font-size: 1em;
+                    border: none;
+                    border-radius: 5px;
+                    cursor: pointer;
+                ">确认</button>
+                <button id="cancel-btn" style="
+                    background-color: #909090;
+                    color: white;
+                    padding: 0.6em 1.2em;
+                    font-size: 1em;
+                    border: none;
+                    border-radius: 5px;
+                    margin-right: 0.5em;
+                    cursor: pointer;
+                ">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 冒泡提示 避免被打断-->
+    <div id="toast-container" style="
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      pointer-events: none;
+    "></div>
+
+    <script>
+        const tabs = document.querySelectorAll('.tab');
+        const contents = document.querySelectorAll('.tab-content');
+        const characterDict = {{ character_dict | tojson }};
+
+        // tab角色切换的方法
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                const target = tab.getAttribute('data-tab');
+                localStorage.setItem('activeTabIndex', target);
+                // 切换 tab 样式
+                tabs.forEach(t => t.classList.toggle('active', t === tab));
+                // 显示对应内容，隐藏其他
+                contents.forEach(c => c.classList.toggle('active', c.getAttribute('data-tab') === target));
+
+                // 加载对应 tab 的第一个情绪按钮音频
+                const activeContent = document.querySelector(`.tab-content[data-tab="${target}"]`);
+                const firstEmotionButton = activeContent.querySelector('.emotion-button');
+                if (firstEmotionButton) {
+                    // 清除旧的选中状态
+                    activeContent.querySelectorAll('.emotion-button').forEach(btn => btn.classList.remove('selected'));
+                    firstEmotionButton.classList.add('selected');
+                    loadEmotionAudio(firstEmotionButton, true);
+                }
+
+                // 设置滚动监听（只需要设置一次）
+                const emotionContainer = activeContent.querySelector('.emotion-buttons');
+                const character = emotionContainer?.dataset.character;
+                setupScrollListener(character);
+
+            });
+        });
+
+        // 加载音频元素
+        function loadEmotionAudio(selectElement, reset = true) {
+            const emotion = selectElement.dataset.emotion;
+            const character = selectElement.dataset.character;
+            const audioTbody = document.getElementById(`audio_tbody_${character}`);
+            const status = selectElement.closest('.tab-content').querySelector('.load-status');
+            status.textContent = '加载中...';
+
+            // 防止重复请求（关键：正在加载中则跳过）
+            if (selectElement.dataset.loading === 'true') {
+                return;
+            }
+
+            if (reset) {
+                selectElement.dataset.page = 1;
+                selectElement.dataset.hasMore = 'true';
+                selectElement.dataset.notified = 'false'; // 重置提示状态
+                audioTbody.innerHTML = '';
+            }
+
+            console.log(selectElement.dataset.hasMore)
+            if (selectElement.dataset.hasMore !== 'true') {
+                status.textContent = '没有更多了';
+                if (selectElement.dataset.notified !== 'true') {
+                    selectElement.dataset.notified = 'true';
+                }
+                return;
+            }
+
+            selectElement.dataset.loading = 'true';  // 开始加载
+            const page = parseInt(selectElement.dataset.page) || 1;
+            fetch(`/get_emotion_audio?character=${encodeURIComponent(character)}&emotion=${encodeURIComponent(emotion)}&page=${page}&page_size=10`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.audio_files.length > 0) {
+                        const rowsHtml = data.audio_files.map(file => `
+                            <tr>
+                                <td>
+                                    <audio controls>
+                                        <source src="/voice?filename=${encodeURIComponent(file)}" type="audio/wav">
+                                        您的浏览器不支持音频播放。
+                                    </audio>
+                                </td>
+                                <td style="word-break: break-word; white-space: normal; line-height: 1.5; width: 60em;">${file.split('\\').pop()}</td>
+                                <td>
+                                    <button class="edit-btn" data-character="${character}" data-emotion="${emotion}" data-file="${file}">修改情绪</button>
+                                    <button class="copy-btn" data-file="${file}">复制路径</button>
+                                    <button class="text-btn" data-file="${file}">复制文字</button>
+                                </td>
+                            </tr>
+                        `).join('');
+                        audioTbody.insertAdjacentHTML('beforeend', rowsHtml);
+                    }
+
+                    if (!data.has_more) {
+                        selectElement.dataset.hasMore = 'false'; // 标记没更多了
+                    } else {
+                        // 如果还有更多，页数加1，为下一次加载做准备
+                        status.textContent = '可以继续下滑...';
+                        selectElement.dataset.page = page + 1;
+                    }
+                })
+                .catch(err => {
+                    console.error('加载音频失败:', err);
+                    if (reset) audioTbody.innerHTML = '<tr><td colspan="3">加载失败</td></tr>';
+                })
+                .finally(() => {
+                    selectElement.dataset.loading = 'false';  // 加载结束
+                });
+        }
+
+        // 修改情绪的方法
+        setupEditButtonDelegation();
+        function setupEditButtonDelegation() {
+            const modal = document.getElementById('emotion-modal');
+            const cancelBtn = document.getElementById('cancel-btn');
+            const confirmBtn = document.getElementById('confirm-btn');
+            const select = document.getElementById('emotion-select');
+            const filename_input = document.getElementById('emotion-filename-input');
+
+            // 绑定事件委托
+            document.querySelectorAll('[id^="audio_tbody_"]').forEach(tbody => {
+                if (tbody.dataset.delegated === 'true') return;
+                tbody.dataset.delegated = 'true';
+
+                tbody.addEventListener('click', function (event) {
+                    const button = event.target.closest('.edit-btn');
+                    if (!button) return;
+
+                    const character = button.dataset.character;
+                    const emotions = characterDict[character] || [];
+                    const origin_emotion = button.dataset.emotion
+                    const file = button.dataset.file;
+
+                    // 清空之前的选项
+                    select.innerHTML = '';
+                    filename_input.value = '';
+
+                    for (let emotion of emotions) {
+                        const option = document.createElement('option');
+                        option.value = emotion;
+                        option.textContent = emotion;
+
+                        if (emotion === origin_emotion) {
+                            option.selected = true;
+                        }
+
+                        select.appendChild(option);
+                    }
+
+                    // 改变文本提示
+                    const fileName = file.split(/[/\\]/).pop();
+                    const dotIndex = fileName.lastIndexOf('.');
+                    const nameWithoutExt = dotIndex !== -1 ? fileName.substring(0, dotIndex) : fileName;
+                    const ext = dotIndex !== -1 ? fileName.substring(dotIndex + 1) : '';
+                    document.getElementById('emotion-filename-input').value = nameWithoutExt;
+
+                    // 显示弹窗
+                    modal.style.display = 'flex';
+
+                    // 取消按钮
+                    cancelBtn.onclick = () => {
+                        modal.style.display = 'none';
+                    };
+
+                    // 确认按钮
+                    confirmBtn.onclick = () => {
+                        const selectedEmotion = select.value;
+                        const invalidChars = /[\\\/:*?"<>|.]/;
+                        if (selectedEmotion === origin_emotion && fileName === (filename_input.value + '.' + ext)){
+                            modal.style.display = 'none';
+                            setTimeout(() => {alert('情绪和文本均没有修改');}, 0);
+                            return;
+                        }
+
+                        if (invalidChars.test(filename_input.value)) {
+                            modal.style.display = 'none';
+                            setTimeout(() => {alert('文件名不能包含特殊符号');}, 0);
+                            return;
+                        }
+
+                        fetch('/modify_emotion', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                file: file,
+                                emotion_type: selectedEmotion,
+                                emotion_text:filename_input.value,
+                                emotion_text_ext:ext
+                            })
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                location.reload();  // 刷新页面
+                            } else {
+                                alert(`修改失败：${data.error || '未知错误'}`);
+                            }
+                        })
+                        .catch(error => {
+                            console.error('请求失败：', error);
+                            alert('修改失败，网络错误');
+                        });
+                        modal.style.display = 'none';
+                    };
+                });
+            });
+        }
+
+        // 监听滚动，触发加载
+        function setupScrollListener(character) {
+            const scrollContainer = document.getElementById(`scroll_container_${character}`);
+            if (!scrollContainer) return;
+
+            // 防止重复绑定
+            if (scrollContainer.dataset.listenerBound === 'true') return;
+            scrollContainer.dataset.listenerBound = 'true';
+
+            scrollContainer.addEventListener('scroll', () => {
+                const scrollTop = scrollContainer.scrollTop;
+                const scrollHeight = scrollContainer.scrollHeight;
+                const offsetHeight = scrollContainer.offsetHeight;
+
+                if (scrollHeight - (scrollTop + offsetHeight) < 50) {
+                    const activeButton = scrollContainer.closest('.tab-content')
+                        .querySelector('.emotion-button.selected');
+                    if (activeButton) {
+                        loadEmotionAudio(activeButton, false);
+                    }
+                }
+            });
+        }
+
+        // 绑定事件
+        document.querySelectorAll('.tab-content').forEach(tabContent => {
+            const emotionContainer = tabContent.querySelector('.emotion-buttons');
+            const character = emotionContainer?.dataset.character;
+            const selectedButton = tabContent.querySelector('.emotion-button.selected');
+
+            if (selectedButton) {
+                loadEmotionAudio(selectedButton, true); // 首次加载
+            }
+            setupScrollListener(character); // 绑定滚动事件
+        });
+
+        // 页面首次打开 默认加载第一个 tab下的第一个情绪数据
+        document.addEventListener('DOMContentLoaded', () => {
+
+            const savedTab = localStorage.getItem('activeTabIndex');
+            const savedEmotion = localStorage.getItem('activeEmotion');
+
+            // 先取消所有 active 状态
+            tabs.forEach(t => t.classList.remove('active'));
+            contents.forEach(c => c.classList.remove('active'));
+
+            // 找到对应 tab 和内容
+            const targetTab = document.querySelector(`.tab[data-tab="${savedTab}"]`) || tabs[0];
+            const targetContent = document.querySelector(`.tab-content[data-tab="${savedTab}"]`) || contents[0];
+
+            if (targetTab && targetContent) {
+                targetTab.classList.add('active');
+                targetContent.classList.add('active');
+
+                // 找到 emotion 按钮
+                const emotionButtons = targetContent.querySelectorAll('.emotion-button');
+                let emotionBtn = null;
+                if (savedEmotion) {
+                    emotionBtn = targetContent.querySelector(`.emotion-button[data-emotion="${savedEmotion}"]`);
+                }
+                // 如果没有保存的，默认第一个
+                if (!emotionBtn) {
+                    emotionBtn = emotionButtons[0];
+                }
+
+                if (emotionBtn) {
+                    emotionBtn.classList.add('selected');
+                    loadEmotionAudio(emotionBtn, true);
+                }
+
+                // 设置滚动监听
+                const character = targetContent.querySelector('.emotion-buttons')?.dataset.character;
+                setupScrollListener(character);
+            }
+        });
+
+        // 复制路径按钮 用于复制文件路径
+        document.addEventListener('click', function (event) {
+            if (event.target && event.target.classList.contains('copy-btn')) {
+                const filePath = event.target.getAttribute('data-file');
+                navigator.clipboard.writeText(filePath).then(() => {
+                    showToast("路径已复制到剪贴板！");
+                }).catch(err => {
+                    console.error("复制失败:", err);
+                    showToast("复制失败，请检查浏览器权限。");
+                });
+            }
+        });
+
+        // 复制文本按钮 用于复制文件名称
+        document.addEventListener('click', function (event) {
+            if (event.target && event.target.classList.contains('text-btn')) {
+                const filePath = event.target.getAttribute('data-file');
+                const fileNameWithExt = filePath.split(/[/\\]/).pop();
+                const fileName = fileNameWithExt.replace(/\.wav$/i, '');
+                navigator.clipboard.writeText(fileName).then(() => {
+                    showToast("路径已复制到剪贴板！");
+                }).catch(err => {
+                    console.error("复制失败:", err);
+                    showToast("复制失败，请检查浏览器权限。");
+                });
+            }
+        });
+
+        // 删除角色
+        document.querySelectorAll('.delete-btn').forEach(button => {
+            button.addEventListener('click', () => {
+                const character = button.dataset.character;
+                if (confirm(`确认删除角色 "${character}"？此操作不可撤销！`)) {
+                    fetch(`/delete_character`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ character: character }),
+                    })
+                    .then(response => response.json())
+                    .then(result => {
+                        if (result.success) {
+                            localStorage.removeItem('activeTabIndex');
+                            localStorage.removeItem('activeEmotion');
+                            location.reload(); // 重新加载页面刷新 UI
+                        } else {
+                            alert(`删除失败：${result.error || '未知错误'}`);
+                        }
+                    })
+                    .catch(err => {
+                        console.error('删除失败:', err);
+                        alert('请求失败，请检查网络或后端日志');
+                    });
+                }
+            });
+        });
+
+        // 用按钮切换情绪音频文件
+        function loadEmotionAudioButton(button) {
+            const container = button.parentElement;
+            // 取消其他按钮的选中样式并设置当前按钮为选中
+            container.querySelectorAll('.emotion-button').forEach(btn => {
+                btn.classList.remove('selected');
+            });
+            button.classList.add('selected');
+            localStorage.setItem('activeEmotion', button.dataset.emotion);
+            loadEmotionAudio(button);
+        }
+
+        // 新增情绪
+        document.querySelectorAll('.add-emotion-btn').forEach(button => {
+            button.addEventListener('click', () => {
+                const name = prompt('请输入情绪的名称：');
+                if (!name) return;
+                const character = button.dataset.character;
+                fetch('/add_emotion', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ character: character, name: name })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        localStorage.setItem('activeEmotion', name);
+                        location.reload();  // 刷新页面
+                    } else {
+                        alert(`添加失败：${data.error || '未知错误'}`);
+                    }
+                })
+                .catch(err => {
+                    console.error('添加情绪败:', err);
+                    alert('请求失败，请检查网络或后端日志');
+                });
+            });
+        });
+
+        // 删除情绪
+        document.querySelectorAll('.delete-emotion-btn').forEach(button => {
+            button.addEventListener('click', (event) => {
+                event.stopPropagation();
+                const emotion = button.dataset.emotion;
+                const character = button.dataset.character;
+                const confirmed = confirm(`是否删除情绪「${emotion}」？`);
+                if (!confirmed) return;
+
+                fetch('/del_emotion', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ character: character, emotion: emotion })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        localStorage.removeItem('activeEmotion');
+                        location.reload();  // 刷新页面
+                    } else {
+                        alert(`删除情绪失败：${data.error || '未知错误'}`);
+                    }
+                })
+                .catch(err => {
+                    console.error('删除情绪失败:', err);
+                    alert('请求失败，请检查网络或后端日志');
+                });
+            });
+        });
+
+        // 冒泡提示框
+        function showToast(message, duration = 2000) {
+          const toast = document.createElement('div');
+          toast.textContent = message;
+          toast.style.cssText = `
+            background-color: #4CAF50;
+            color: #fff;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+          `;
+
+          const container = document.getElementById('toast-container');
+          container.appendChild(toast);
+
+          // 渐显
+          setTimeout(() => {
+            toast.style.opacity = 1;
+          }, 10);
+
+          // 2秒后自动移除
+          setTimeout(() => {
+            toast.style.opacity = 0;
+            setTimeout(() => {
+              container.removeChild(toast);
+            }, 300);
+          }, duration);
+        }
+    </script>
+</body>
+</html>
