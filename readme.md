@@ -51,5 +51,5 @@
 
 #### 制作不易~请我喝杯茶吧
 
-![supportMe](.\static\supportMe.jpg)
+![supportMe](https://raw.githubusercontent.com/dajuanmao0224/voice_select/refs/heads/master/static/supportMe.jpg)
 
